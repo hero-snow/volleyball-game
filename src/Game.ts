@@ -89,8 +89,6 @@ export class Game {
   }
 
   private update(): void {
-    this.inputManager.update();
-
     switch (this.phase) {
       case 'title':
         if (this.inputManager.isActionJustPressed()) {
@@ -145,6 +143,9 @@ export class Game {
         }
         break;
     }
+
+    // Clear just pressed events at end of frame
+    this.inputManager.endFrame();
   }
 
   private startMatch(): void {

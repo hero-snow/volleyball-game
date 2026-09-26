@@ -2,7 +2,7 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT } from './constants';
 
 export class InputManager {
   private keys: { [key: string]: boolean } = {};
-  private prevKeys: { [key: string]: boolean } = {};
+  private justPressedKeys: { [key: string]: boolean } = {};
 
   // Touch UI Button hitboxes (defined in virtual canvas 960x540 space)
   public readonly dpadCenter = { x: 120, y: 440, radius: 60 };
@@ -11,7 +11,7 @@ export class InputManager {
   private touchMoveX: number = 0; // -1 to 1
   private touchJump: boolean = false;
   private touchAction: boolean = false;
-  private prevTouchAction: boolean = false;
+  private touchActionJustPressed: boolean = false;
 
   private activeTouches: Map<number, { x: number; y: number }> = new Map();
 
@@ -22,14 +22,33 @@ export class InputManager {
 
   private setupKeyboard(): void {
     window.addEventListener('keydown', (e) => {
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'z', 'Z', 'x', 'X'].includes(e.key)) {
+      const code = e.code;
+      const key = e.key;
+
+      if (
+        code === 'Space' ||
+        key === ' ' ||
+        code.startsWith('Arrow') ||
+        key.startsWith('Arrow') ||
+        ['z', 'Z', 'x', 'X', 'Enter'].includes(key)
+      ) {
         e.preventDefault();
       }
-      this.keys[e.key.toLowerCase()] = true;
+
+      const keyName = key.toLowerCase();
+      if (!this.keys[keyName] && !this.keys[code]) {
+        this.justPressedKeys[keyName] = true;
+        this.justPressedKeys[code] = true;
+      }
+
+      this.keys[keyName] = true;
+      this.keys[code] = true;
     });
 
     window.addEventListener('keyup', (e) => {
-      this.keys[e.key.toLowerCase()] = false;
+      const keyName = e.key.toLowerCase();
+      this.keys[keyName] = false;
+      this.keys[e.code] = false;
     });
   }
 
@@ -51,15 +70,22 @@ export class InputManager {
       this.processTouchInputs();
     };
 
+    const handleCanvasClick = () => {
+      // Allow canvas click to trigger action (e.g. starting game or hitting)
+      this.touchActionJustPressed = true;
+    };
+
     canvas.addEventListener('touchstart', handleTouch, { passive: false });
     canvas.addEventListener('touchmove', handleTouch, { passive: false });
     canvas.addEventListener('touchend', handleTouch, { passive: false });
     canvas.addEventListener('touchcancel', handleTouch, { passive: false });
+    canvas.addEventListener('click', handleCanvasClick);
   }
 
   private processTouchInputs(): void {
     this.touchMoveX = 0;
     this.touchJump = false;
+    const prevTouchAction = this.touchAction;
     this.touchAction = false;
 
     this.activeTouches.forEach((pos) => {
@@ -83,17 +109,21 @@ export class InputManager {
         this.touchAction = true;
       }
     });
+
+    if (this.touchAction && !prevTouchAction) {
+      this.touchActionJustPressed = true;
+    }
   }
 
-  public update(): void {
-    // Copy key states to prevKeys
-    this.prevKeys = { ...this.keys };
-    this.prevTouchAction = this.touchAction;
+  public endFrame(): void {
+    // Clear justPressed flags at the end of the frame loop
+    this.justPressedKeys = {};
+    this.touchActionJustPressed = false;
   }
 
   public getMoveX(): number {
-    if (this.keys['arrowleft'] || this.keys['a']) return -1;
-    if (this.keys['arrowright'] || this.keys['d']) return 1;
+    if (this.keys['arrowleft'] || this.keys['a'] || this.keys['KeyA']) return -1;
+    if (this.keys['arrowright'] || this.keys['d'] || this.keys['KeyD']) return 1;
     return this.touchMoveX;
   }
 
@@ -101,23 +131,40 @@ export class InputManager {
     return (
       this.keys['arrowup'] ||
       this.keys['w'] ||
+      this.keys['KeyW'] ||
       this.keys['x'] ||
+      this.keys['KeyX'] ||
+      this.justPressedKeys['arrowup'] ||
+      this.justPressedKeys['KeyW'] ||
       this.touchJump
     );
   }
 
   public isActionJustPressed(): boolean {
-    const keyJustPressed =
-      (this.keys[' '] && !this.prevKeys[' ']) ||
-      (this.keys['z'] && !this.prevKeys['z']) ||
-      (this.keys['enter'] && !this.prevKeys['enter']);
+    const spaceJustPressed =
+      this.justPressedKeys[' '] ||
+      this.justPressedKeys['Space'] ||
+      this.justPressedKeys['space'];
 
-    const touchJustPressed = this.touchAction && !this.prevTouchAction;
+    const zJustPressed =
+      this.justPressedKeys['z'] ||
+      this.justPressedKeys['KeyZ'];
 
-    return keyJustPressed || touchJustPressed;
+    const enterJustPressed =
+      this.justPressedKeys['enter'] ||
+      this.justPressedKeys['Enter'];
+
+    return spaceJustPressed || zJustPressed || enterJustPressed || this.touchActionJustPressed;
   }
 
   public isActionHeld(): boolean {
-    return this.keys[' '] || this.keys['z'] || this.keys['enter'] || this.touchAction;
+    return (
+      this.keys[' '] ||
+      this.keys['Space'] ||
+      this.keys['z'] ||
+      this.keys['KeyZ'] ||
+      this.keys['enter'] ||
+      this.touchAction
+    );
   }
 }
