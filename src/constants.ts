@@ -1,110 +1,114 @@
-// ==========================================
-// Game Constants & Types
-// ==========================================
+// 画面・コート定数
+export const CANVAS_WIDTH = 480;
+export const CANVAS_HEIGHT = 270;
 
-// Canvas dimensions (16:9 for landscape tablet)
-export const CANVAS_WIDTH = 960;
-export const CANVAS_HEIGHT = 540;
+// コート寸法
+export const FLOOR_Y = 215;
+export const COURT_LEFT = 50;
+export const COURT_RIGHT = 430;
+export const COURT_WIDTH = COURT_RIGHT - COURT_LEFT; // 380
+export const NET_X = 240;
+export const NET_HEIGHT = 70;
+export const NET_TOP_Y = FLOOR_Y - NET_HEIGHT; // 145
+export const NET_WIDTH = 4;
+export const ATTACK_LINE_OFFSET = 60;
+export const PLAYER_ATTACK_X = NET_X - ATTACK_LINE_OFFSET; // 180
+export const CPU_ATTACK_X = NET_X + ATTACK_LINE_OFFSET; // 300
 
-// Court geometry
-export const COURT_LEFT = 80;
-export const COURT_RIGHT = 880;
-export const COURT_FLOOR_Y = 420;
-export const NET_X = 480;
-export const NET_TOP_Y = 260;
-export const NET_WIDTH = 6;
+export function projectCourtPosition(x: number, depth: number, height: number = 0): { x: number; y: number } {
+  const perspectiveScale = 0.84 + depth * 0.08;
+  return {
+    x: CANVAS_WIDTH / 2 + (x - NET_X) * perspectiveScale,
+    y: 146 + (depth - 0.5) * 118 - height * perspectiveScale * 0.7
+  };
+}
 
-// Player dimensions & physics
-export const PLAYER_WIDTH = 28;
-export const PLAYER_HEIGHT = 44;
-export const PLAYER_SPEED = 3.5;
-export const PLAYER_JUMP_POWER = 9.5;
-export const GRAVITY = 0.4;
-export const HIT_COOLDOWN = 18;
+// 物理演算
+export const GRAVITY = 0.28;
+export const AIR_RESISTANCE = 0.995;
+export const BALL_BOUNCE = 0.55;
+export const BALL_RADIUS = 4.5;
 
-// Ball physics
-export const BALL_RADIUS = 8;
-export const BALL_GRAVITY = 0.2;
-export const BALL_MAX_SPEED = 15;
+// プレイヤー寸法と性能
+export const PLAYER_WIDTH = 16;
+export const PLAYER_HEIGHT = 32;
+export const PLAYER_SPEED = 2.0;
+export const JUMP_IMPULSE = -5.8;
 
-// Game rules
+// ゲームルール
 export const MAX_TOUCHES = 3;
-export const WIN_SCORE = 15;
-export const DEUCE_MARGIN = 2;
-export const POINT_PAUSE_FRAMES = 120;
+export const DEFAULT_WIN_SCORE = 25;
 
-// ==========================================
-// Types
-// ==========================================
-
-export interface Vec2 {
-  x: number;
-  y: number;
+// チーム定義
+export enum Team {
+  PLAYER = 'PLAYER',
+  CPU = 'CPU'
 }
 
-export type TeamSide = 'left' | 'right';
-export type PlayerRole = 'front' | 'setter' | 'back';
-export type PlayerState = 'idle' | 'run' | 'jump' | 'spike' | 'receive' | 'serve' | 'fall';
-export type GamePhase = 'title' | 'ready' | 'serve' | 'play' | 'point' | 'gameOver';
+// プレイヤーステート
+export enum PlayerState {
+  IDLE = 'IDLE',
+  RUN = 'RUN',
+  JUMP = 'JUMP',
+  SPIKE = 'SPIKE',
+  RECEIVE = 'RECEIVE',
+  TOSS = 'TOSS',
+  BLOCK = 'BLOCK',
+  DIVE = 'DIVE',
+  SERVE_PREPARE = 'SERVE_PREPARE',
+  SERVE_TOSS = 'SERVE_TOSS',
+  SERVE_HIT = 'SERVE_HIT',
+  CELEBRATE = 'CELEBRATE',
+  DISAPPOINTED = 'DISAPPOINTED'
+}
 
-// ==========================================
-// Retro Color Palette
-// ==========================================
+// ゲームステート
+export enum GameState {
+  TITLE = 'TITLE',
+  SERVE_WAIT = 'SERVE_WAIT',
+  SERVE_IN_AIR = 'SERVE_IN_AIR',
+  RALLY = 'RALLY',
+  BALL_DEAD = 'BALL_DEAD',
+  POINT_SCORED = 'POINT_SCORED',
+  MATCH_END = 'MATCH_END'
+}
 
-export const COLORS = {
-  bg: '#0f1b35',
-  court: '#d4a574',
-  courtDark: '#c49564',
-  courtLine: '#ffffff',
-  net: '#cccccc',
-  netBand: '#ffffff',
-  netPole: '#888888',
-  shadow: 'rgba(0,0,0,0.3)',
+// ファミコン風NESカラーパレット
+export const NES_COLORS = {
+  BLACK: '#000000',
+  WHITE: '#fcfcfc',
+  GRAY_LIGHT: '#bcbcbc',
+  GRAY_DARK: '#7c7c7c',
+  DARK_BG: '#0b1626',
+  FLOOR_DARK: '#a85b20',
+  FLOOR_LIGHT: '#c8782a',
+  COURT_LINE: '#ffffff',
+  COURT_FILL: '#206030',
+  NET_POST: '#888888',
+  NET_MESH: '#d8d8d8',
+  NET_TOP: '#f83800',
+  BALL_WHITE: '#fcfcfc',
+  BALL_LINE: '#3858a8',
+  SHADOW: 'rgba(0, 0, 0, 0.45)',
 
-  ball: '#f0f0f0',
-  ballStripe: '#cc3333',
+  // 1Pチーム
+  TEAM_PLAYER_SKIN: '#fca044',
+  TEAM_PLAYER_HAIR: '#000000',
+  TEAM_PLAYER_SHIRT: '#fcfcfc',
+  TEAM_PLAYER_PANTS: '#d82800',
+  TEAM_PLAYER_SHOES: '#0058f8',
 
-  team1Jersey: '#cc2222',
-  team1Shorts: '#ffffff',
-  team1Skin: '#f5c5a3',
-  team1Hair: '#332211',
+  // CPUチーム
+  TEAM_CPU_SKIN: '#fcd8a8',
+  TEAM_CPU_HAIR: '#a84400',
+  TEAM_CPU_SHIRT: '#00a800',
+  TEAM_CPU_PANTS: '#fcb800',
+  TEAM_CPU_SHOES: '#fcfcfc',
 
-  team2Jersey: '#2244cc',
-  team2Shorts: '#ffffff',
-  team2Skin: '#f5c5a3',
-  team2Hair: '#221133',
-
-  scorePanel: 'rgba(0,0,0,0.7)',
-  scoreText: '#ffffff',
-  scoreActive: '#ffdd44',
-
-  controlBg: 'rgba(255,255,255,0.10)',
-  controlActive: 'rgba(255,255,255,0.30)',
-  controlBorder: 'rgba(255,255,255,0.20)',
+  // UI・文字
+  TEXT_YELLOW: '#fcb800',
+  TEXT_WHITE: '#ffffff',
+  TEXT_RED: '#d82800',
+  TEXT_BLUE: '#00a8f8',
+  UI_PANEL: '#181828'
 };
-
-// ==========================================
-// Formation Helpers
-// ==========================================
-
-export function getFormation(side: TeamSide): Record<PlayerRole, Vec2> {
-  if (side === 'left') {
-    return {
-      front:  { x: 360, y: COURT_FLOOR_Y },
-      setter: { x: 240, y: COURT_FLOOR_Y },
-      back:   { x: 140, y: COURT_FLOOR_Y },
-    };
-  } else {
-    return {
-      front:  { x: 600, y: COURT_FLOOR_Y },
-      setter: { x: 720, y: COURT_FLOOR_Y },
-      back:   { x: 820, y: COURT_FLOOR_Y },
-    };
-  }
-}
-
-export function getTeamBounds(side: TeamSide): { minX: number; maxX: number } {
-  return side === 'left'
-    ? { minX: COURT_LEFT + 15, maxX: NET_X - NET_WIDTH / 2 - 15 }
-    : { minX: NET_X + NET_WIDTH / 2 + 15, maxX: COURT_RIGHT - 15 };
-}
