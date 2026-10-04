@@ -30,14 +30,23 @@ export class Player {
   public homeX: number;
   public homeDepth: number;
   public targetX: number;
+  public jerseyNumber: number;
 
   public role: 'setter' | 'spiker' | 'receiver' | 'server' = 'receiver';
 
-  public animFrame: number = 0;
   public animTimer: number = 0;
+  public animProgress: number = 0;
   public stateTimer: number = 0;
+  public diveSpeed: number = 0;
 
-  constructor(id: number, team: Team, homeX: number, role: 'setter' | 'spiker' | 'receiver' | 'server', depth: number = 0.5) {
+  constructor(
+    id: number,
+    team: Team,
+    homeX: number,
+    role: 'setter' | 'spiker' | 'receiver' | 'server',
+    depth: number = 0.5,
+    jerseyNumber: number = 1
+  ) {
     this.id = id;
     this.team = team;
     this.homeX = homeX;
@@ -47,6 +56,7 @@ export class Player {
     this.x = homeX;
     this.y = FLOOR_Y - this.height;
     this.role = role;
+    this.jerseyNumber = jerseyNumber;
     this.facing = team === Team.PLAYER ? 1 : -1;
   }
 
@@ -55,23 +65,24 @@ export class Player {
     this.depth = this.homeDepth;
     this.targetX = this.homeX;
     this.y = FLOOR_Y - this.height;
-    this.depth = this.homeDepth;
     this.vx = 0;
     this.vy = 0;
+    this.diveSpeed = 0;
     this.isGrounded = true;
     this.state = PlayerState.IDLE;
     this.facing = this.team === Team.PLAYER ? 1 : -1;
     this.stateTimer = 0;
+    this.animTimer = 0;
   }
 
   public setServePosition(isServer: boolean): void {
     this.depth = this.homeDepth;
     if (isServer) {
       if (this.team === Team.PLAYER) {
-        this.x = COURT_LEFT - 15;
+        this.x = COURT_LEFT - 25;
         this.facing = 1;
       } else {
-        this.x = COURT_RIGHT + 15;
+        this.x = COURT_RIGHT + 25;
         this.facing = -1;
       }
       this.state = PlayerState.SERVE_PREPARE;
@@ -87,11 +98,8 @@ export class Player {
   }
 
   public update(): void {
-    this.animTimer++;
-    if (this.animTimer > 8) {
-      this.animTimer = 0;
-      this.animFrame = (this.animFrame + 1) % 4;
-    }
+    this.animTimer += 0.08;
+    this.animProgress += 0.12;
 
     if (this.stateTimer > 0) {
       this.stateTimer--;
@@ -102,9 +110,20 @@ export class Player {
       }
     }
 
+    // Diving motion along floor
+    if (this.state === PlayerState.DIVE) {
+      this.x += this.facing * this.diveSpeed;
+      this.diveSpeed *= 0.88;
+      if (this.diveSpeed < 0.3) {
+        this.diveSpeed = 0;
+      }
+    }
+
+    // Jump / airborne physics
     if (!this.isGrounded) {
       this.vy += GRAVITY;
       this.y += this.vy;
+      this.x += this.vx * 0.85;
 
       if (this.y >= FLOOR_Y - this.height) {
         this.y = FLOOR_Y - this.height;
@@ -112,123 +131,132 @@ export class Player {
         this.isGrounded = true;
         if (this.state === PlayerState.JUMP || this.state === PlayerState.SPIKE || this.state === PlayerState.BLOCK) {
           this.state = PlayerState.IDLE;
+          this.stateTimer = 12; // Brief landing recovery
         }
       }
-    }
-
-    this.x += this.vx;
-
-    if (this.team === Team.PLAYER) {
-      const minX = (this.state === PlayerState.SERVE_PREPARE || this.state === PlayerState.SERVE_TOSS) ? COURT_LEFT - 25 : COURT_LEFT - 10;
-      const maxX = NET_X - this.width - 2;
-      if (this.x < minX) this.x = minX;
-      if (this.x > maxX) this.x = maxX;
     } else {
-      const minX = NET_X + 2;
-      const maxX = (this.state === PlayerState.SERVE_PREPARE || this.state === PlayerState.SERVE_TOSS) ? COURT_RIGHT + 25 : COURT_RIGHT + 10;
-      if (this.x < minX) this.x = minX;
-      if (this.x > maxX) this.x = maxX;
-    }
-
-    if (this.isGrounded) {
-      if (Math.abs(this.vx) > 0.2) {
-        if (this.state === PlayerState.IDLE) {
-          this.state = PlayerState.RUN;
-        }
-      } else if (this.state === PlayerState.RUN) {
-        this.state = PlayerState.IDLE;
+      // Horizontal motion on floor
+      if (this.state !== PlayerState.DIVE) {
+        this.x += this.vx;
+        this.vx *= 0.78; // Smooth friction
       }
     }
-  }
 
-  public jump(impulse: number = JUMP_IMPULSE): boolean {
-    if (this.isGrounded && this.state !== PlayerState.SERVE_PREPARE) {
-      this.vy = impulse;
-      this.isGrounded = false;
-      this.state = PlayerState.JUMP;
-      return true;
+    // Restrict within team court side
+    const buffer = 15;
+    if (this.team === Team.PLAYER) {
+      this.x = Math.max(COURT_LEFT - 40, Math.min(NET_X - buffer, this.x));
+    } else {
+      this.x = Math.max(NET_X + buffer, Math.min(COURT_RIGHT + 40, this.x));
     }
-    return false;
+
+    // Depth bounds
+    this.depth = Math.max(0.1, Math.min(0.9, this.depth));
   }
 
-  public move(dirX: number): void {
-    if (this.state === PlayerState.SERVE_PREPARE) return;
-    this.vx = dirX * PLAYER_SPEED;
-    if (dirX !== 0) {
+  public moveAnalog(dirX: number, dirDepth: number, speedMultiplier: number = 1.0): void {
+    if (!this.isGrounded || this.state === PlayerState.DIVE) return;
+
+    const spd = PLAYER_SPEED * speedMultiplier;
+    this.vx = dirX * spd;
+
+    if (dirDepth !== 0) {
+      this.depth += dirDepth * 0.014 * speedMultiplier;
+      this.depth = Math.max(0.1, Math.min(0.9, this.depth));
+    }
+
+    if (Math.abs(dirX) > 0.1) {
       this.facing = dirX > 0 ? 1 : -1;
+      if (this.state === PlayerState.IDLE) {
+        this.state = PlayerState.RUN;
+      }
+    } else if (this.state === PlayerState.RUN) {
+      this.state = PlayerState.IDLE;
     }
   }
 
-  public moveDepth(dir: number): void {
-    this.depth = Math.max(0, Math.min(1, this.depth + dir * 0.025));
-  }
-
-  public stop(): void {
-    this.vx = 0;
+  public jump(impulseMultiplier: number = 1.0): void {
+    if (!this.isGrounded || this.state === PlayerState.DIVE) return;
+    this.isGrounded = false;
+    this.vy = JUMP_IMPULSE * impulseMultiplier;
+    this.state = PlayerState.JUMP;
   }
 
   public triggerSpike(): void {
+    if (this.isGrounded) {
+      this.jump(1.05);
+    }
     this.state = PlayerState.SPIKE;
-    this.stateTimer = 18;
+    this.stateTimer = 22;
   }
 
   public triggerReceive(): void {
+    if (!this.isGrounded) return;
     this.state = PlayerState.RECEIVE;
-    this.stateTimer = 22;
+    this.stateTimer = 24;
+    this.vx *= 0.3;
   }
 
   public triggerToss(): void {
+    if (!this.isGrounded) return;
     this.state = PlayerState.TOSS;
     this.stateTimer = 22;
+    this.vx *= 0.3;
   }
 
   public triggerBlock(): void {
+    if (this.isGrounded) {
+      this.jump(1.0);
+    }
     this.state = PlayerState.BLOCK;
-    this.stateTimer = 25;
-  }
-
-  public triggerDive(dir: number): void {
-    this.state = PlayerState.DIVE;
     this.stateTimer = 30;
-    this.vx = dir * (PLAYER_SPEED * 1.8);
   }
 
-  public setCelebrate(): void {
+  public triggerDive(): void {
+    if (!this.isGrounded || this.state === PlayerState.DIVE) return;
+    this.state = PlayerState.DIVE;
+    this.diveSpeed = PLAYER_SPEED * 1.6;
+    this.stateTimer = 35;
+  }
+
+  public celebrate(): void {
     this.state = PlayerState.CELEBRATE;
     this.stateTimer = 90;
     this.vx = 0;
   }
 
-  public setDisappointed(): void {
+  public disappointed(): void {
     this.state = PlayerState.DISAPPOINTED;
     this.stateTimer = 90;
     this.vx = 0;
   }
 
   public getHandPos(): { x: number; y: number } {
-    let offsetX = this.facing * 6;
-    let offsetY = 8;
+    const centerX = this.x + this.width / 2;
+    const forwardX = centerX + this.facing * 14;
 
-    if (this.state === PlayerState.SPIKE) {
-      offsetY = -4;
-      offsetX = this.facing * 8;
-    } else if (this.state === PlayerState.BLOCK) {
-      offsetY = -6;
-      offsetX = this.facing * 4;
-    } else if (this.state === PlayerState.TOSS) {
-      offsetY = 0;
-      offsetX = 0;
-    } else if (this.state === PlayerState.RECEIVE) {
-      offsetY = 18;
-      offsetX = this.facing * 10;
-    } else if (this.state === PlayerState.DIVE) {
-      offsetY = 26;
-      offsetX = this.facing * 14;
+    switch (this.state) {
+      case PlayerState.SPIKE:
+        // High reach above head
+        return { x: forwardX + 6, y: this.y - 12 };
+      case PlayerState.BLOCK:
+        // Directly overhead
+        return { x: centerX + this.facing * 8, y: this.y - 14 };
+      case PlayerState.TOSS:
+        // Forehead level
+        return { x: centerX + this.facing * 6, y: this.y + 4 };
+      case PlayerState.RECEIVE:
+        // Waist/knee platform
+        return { x: forwardX, y: this.y + 26 };
+      case PlayerState.DIVE:
+        // Low along floor
+        return { x: centerX + this.facing * 24, y: this.y + 46 };
+      default:
+        return { x: forwardX, y: this.y + 20 };
     }
+  }
 
-    return {
-      x: this.x + this.width / 2 + offsetX,
-      y: this.y + offsetY
-    };
+  public getJumpHeight(): number {
+    return Math.max(0, FLOOR_Y - this.height - this.y);
   }
 }

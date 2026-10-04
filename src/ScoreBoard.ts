@@ -1,22 +1,49 @@
-import { CANVAS_WIDTH, DEFAULT_WIN_SCORE, NES_COLORS, Team } from './constants';
+import { CANVAS_WIDTH, GameMode, Team } from './constants';
+
+export interface MatchStats {
+  spikes: number;
+  blocks: number;
+  aces: number;
+  longestRally: number;
+  totalRallies: number;
+}
 
 export class ScoreBoard {
   public playerScore: number = 0;
   public cpuScore: number = 0;
+  public setsPlayer: number = 0;
+  public setsCpu: number = 0;
+
   public serveTeam: Team = Team.PLAYER;
   public serverIndex: { [key in Team]: number } = {
     [Team.PLAYER]: 0,
     [Team.CPU]: 0
   };
-  public winScore: number = DEFAULT_WIN_SCORE;
+
+  public winScore: number = 11;
   public isDeuce: boolean = false;
+  public isMatchPoint: boolean = false;
   public isGameOver: boolean = false;
   public winner: Team | null = null;
 
-  public message: string = '';
-  public subMessage: string = '';
-  public messageTimer: number = 0;
-  private blinkTimer: number = 0;
+  public gameMode: GameMode = GameMode.QUICK;
+  public tournamentRound: number = 0; // 0 = Quarter, 1 = Semi, 2 = Final
+
+  // HUD Toast Callout
+  public calloutTitle: string = '';
+  public calloutSubtitle: string = '';
+  public calloutTimer: number = 0;
+  public calloutColor: string = '#f59e0b';
+
+  // Stats
+  public stats: MatchStats = {
+    spikes: 0,
+    blocks: 0,
+    aces: 0,
+    longestRally: 0,
+    totalRallies: 0
+  };
+  public currentRallyHits: number = 0;
 
   constructor() {
     this.reset();
@@ -29,29 +56,44 @@ export class ScoreBoard {
     this.serverIndex[Team.PLAYER] = 0;
     this.serverIndex[Team.CPU] = 0;
     this.isDeuce = false;
+    this.isMatchPoint = false;
     this.isGameOver = false;
     this.winner = null;
-    this.message = '';
-    this.subMessage = '';
-    this.messageTimer = 0;
-    this.blinkTimer = 0;
+    this.calloutTitle = '';
+    this.calloutSubtitle = '';
+    this.calloutTimer = 0;
+    this.currentRallyHits = 0;
+  }
+
+  public triggerCallout(title: string, subtitle: string = '', color: string = '#f59e0b'): void {
+    this.calloutTitle = title;
+    this.calloutSubtitle = subtitle;
+    this.calloutTimer = 85;
+    this.calloutColor = color;
+  }
+
+  public recordHit(): void {
+    this.currentRallyHits++;
+    if (this.currentRallyHits > this.stats.longestRally) {
+      this.stats.longestRally = this.currentRallyHits;
+    }
   }
 
   public update(): void {
-    this.blinkTimer++;
-    if (this.messageTimer > 0) {
-      this.messageTimer--;
-      if (this.messageTimer === 0) {
-        this.message = '';
-        this.subMessage = '';
+    if (this.calloutTimer > 0) {
+      this.calloutTimer--;
+      if (this.calloutTimer === 0) {
+        this.calloutTitle = '';
+        this.calloutSubtitle = '';
       }
     }
   }
 
-  public handleRallyEnd(winningTeam: Team, reasonText: string): { isPoint: boolean; isSideOut: boolean; gameEnded: boolean } {
-    const previousServeTeam = this.serveTeam;
-    const isSideOut = winningTeam !== previousServeTeam;
-    const isPoint = true;
+  public handleRallyEnd(winningTeam: Team, reason: 'in' | 'out' | 'touch_out'): {
+    isPoint: boolean;
+    gameEnded: boolean;
+  } {
+    this.stats.totalRallies++;
     let gameEnded = false;
 
     if (winningTeam === Team.PLAYER) {
@@ -60,116 +102,147 @@ export class ScoreBoard {
       this.cpuScore++;
     }
 
-    if (isSideOut) {
-      this.serverIndex[winningTeam] = (this.serverIndex[winningTeam] + 1) % 6;
-    }
-    this.serveTeam = winningTeam;
-
-    const scoreDifference = this.playerScore - this.cpuScore;
-    const winningScore = winningTeam === Team.PLAYER ? this.playerScore : this.cpuScore;
-    if (winningScore >= this.winScore && Math.abs(scoreDifference) >= 2) {
-      this.winner = winningTeam;
-      this.isGameOver = true;
-      gameEnded = true;
-    } else if (this.playerScore >= this.winScore - 1 && this.cpuScore >= this.winScore - 1) {
-      this.isDeuce = this.playerScore === this.cpuScore;
-      const who = winningTeam === Team.PLAYER ? '1P' : 'CPU';
-      this.setMessage(this.isDeuce ? 'DEUCE!' : `${who} MATCH POINT!`, reasonText, 120);
+    // Check Deuce (e.g. 10-10 in 11pt game)
+    if (this.playerScore >= this.winScore - 1 && this.cpuScore >= this.winScore - 1) {
+      this.isDeuce = Math.abs(this.playerScore - this.cpuScore) < 2;
     } else {
-      const who = winningTeam === Team.PLAYER ? '1P POINT!' : 'CPU POINT!';
-      this.setMessage(who, reasonText, 100);
+      this.isDeuce = false;
     }
 
-    if (this.isGameOver) {
-      const winText = this.winner === Team.PLAYER ? 'YOU WIN!!' : 'CPU WINS!';
-      this.setMessage(winText, 'GAME OVER', 240);
+    // Check Match Point
+    const maxScore = Math.max(this.playerScore, this.cpuScore);
+    const minScore = Math.min(this.playerScore, this.cpuScore);
+    if (maxScore >= this.winScore - 1 && maxScore - minScore >= 1) {
+      this.isMatchPoint = true;
+    } else {
+      this.isMatchPoint = false;
     }
 
-    return { isPoint, isSideOut, gameEnded };
+    // Win condition (reach winScore AND lead by 2)
+    if (
+      (this.playerScore >= this.winScore && this.playerScore - this.cpuScore >= 2) ||
+      (this.cpuScore >= this.winScore && this.cpuScore - this.playerScore >= 2)
+    ) {
+      this.isGameOver = true;
+      this.winner = this.playerScore > this.cpuScore ? Team.PLAYER : Team.CPU;
+      gameEnded = true;
+    }
+
+    // Server switches to winning team
+    this.serveTeam = winningTeam;
+    this.currentRallyHits = 0;
+
+    return { isPoint: true, gameEnded };
   }
 
-  public setMessage(msg: string, sub: string = '', duration: number = 90): void {
-    this.message = msg;
-    this.subMessage = sub;
-    this.messageTimer = duration;
-  }
+  public draw(ctx: CanvasRenderingContext2D, touches: { [key in Team]: number }, isPaused: boolean = false): void {
+    ctx.save();
 
-  public draw(ctx: CanvasRenderingContext2D, touches: { [key in Team]: number }): void {
-    const boardY = 6;
-    const boardH = 26;
+    // 1. Top HUD Glass Header Card
+    const cardW = 460;
+    const cardH = 50;
+    const cardX = (CANVAS_WIDTH - cardW) / 2;
+    const cardY = 14;
 
-    ctx.fillStyle = '#080810';
-    ctx.fillRect(CANVAS_WIDTH / 2 - 130, boardY, 260, boardH);
-    ctx.strokeStyle = '#3a4460';
+    // Glass panel
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+    ctx.beginPath();
+    ctx.roundRect(cardX, cardY, cardW, cardH, 10);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(CANVAS_WIDTH / 2 - 130, boardY, 260, boardH);
+    ctx.stroke();
 
-    ctx.font = 'bold 12px monospace';
-    ctx.textBaseline = 'middle';
-
+    // Player Team Badge & Score (Left)
     ctx.textAlign = 'left';
-    ctx.fillStyle = NES_COLORS.TEXT_WHITE;
-    ctx.fillText('1P', CANVAS_WIDTH / 2 - 120, boardY + 13);
+    ctx.textBaseline = 'middle';
+    ctx.font = '800 13px "Outfit", sans-serif';
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillText('FALCONS', cardX + 16, cardY + 18);
 
+    // Serve indicator dot
     if (this.serveTeam === Team.PLAYER) {
-      const showLamp = (Math.floor(this.blinkTimer / 15) % 2 === 0);
-      ctx.fillStyle = showLamp ? '#00e040' : '#006020';
-      ctx.fillRect(CANVAS_WIDTH / 2 - 95, boardY + 9, 8, 8);
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(cardX + 85, cardY + 18, 4, 0, Math.PI * 2);
+      ctx.fill();
     }
 
-    ctx.fillStyle = NES_COLORS.TEXT_YELLOW;
-    ctx.font = 'bold 14px monospace';
-    const pScoreStr = this.playerScore < 10 ? `0${this.playerScore}` : `${this.playerScore}`;
-    ctx.fillText(pScoreStr, CANVAS_WIDTH / 2 - 80, boardY + 13);
+    // Touch counter pips (Left)
+    this.drawTouchPips(ctx, cardX + 16, cardY + 34, touches[Team.PLAYER], '#38bdf8');
 
-    ctx.font = '9px monospace';
-    ctx.fillStyle = '#88a8d8';
-    ctx.fillText(`TOUCH:${touches[Team.PLAYER]}/3`, CANVAS_WIDTH / 2 - 50, boardY + 13);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('-', CANVAS_WIDTH / 2, boardY + 13);
-
-    ctx.font = '9px monospace';
-    ctx.fillStyle = '#d8a888';
+    // Player Score (Big bold number)
+    ctx.font = '900 28px "Outfit", sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(`TOUCH:${touches[Team.CPU]}/3`, CANVAS_WIDTH / 2 + 50, boardY + 13);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(this.playerScore.toString(), cardX + 180, cardY + 26);
 
-    ctx.fillStyle = NES_COLORS.TEXT_YELLOW;
-    ctx.font = 'bold 14px monospace';
-    const cpuScoreStr = this.cpuScore < 10 ? `0${this.cpuScore}` : `${this.cpuScore}`;
-    ctx.fillText(cpuScoreStr, CANVAS_WIDTH / 2 + 80, boardY + 13);
+    // VS / Target Score Badge in Center
+    ctx.textAlign = 'center';
+    ctx.font = '600 10px "Plus Jakarta Sans", sans-serif';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.fillText(`TARGET: ${this.winScore}`, cardX + cardW / 2, cardY + 18);
 
+    ctx.font = '700 11px "Outfit", sans-serif';
+    ctx.fillStyle = this.isDeuce ? '#f43f5e' : (this.isMatchPoint ? '#facc15' : '#94a3b8');
+    ctx.fillText(this.isDeuce ? 'DEUCE' : (this.isMatchPoint ? 'MATCH POINT' : 'VS'), cardX + cardW / 2, cardY + 32);
+
+    // CPU Score (Right)
+    ctx.font = '900 28px "Outfit", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(this.cpuScore.toString(), cardX + cardW - 180, cardY + 26);
+
+    // CPU Team Badge (Right)
+    ctx.textAlign = 'right';
+    ctx.font = '800 13px "Outfit", sans-serif';
+    ctx.fillStyle = '#fb7185';
+    ctx.fillText('OPPONENT', cardX + cardW - 16, cardY + 18);
+
+    // Serve indicator dot (Right)
     if (this.serveTeam === Team.CPU) {
-      const showLamp = (Math.floor(this.blinkTimer / 15) % 2 === 0);
-      ctx.fillStyle = showLamp ? '#00e040' : '#006020';
-      ctx.fillRect(CANVAS_WIDTH / 2 + 87, boardY + 9, 8, 8);
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(cardX + cardW - 95, cardY + 18, 4, 0, Math.PI * 2);
+      ctx.fill();
     }
 
-    ctx.fillStyle = NES_COLORS.TEXT_WHITE;
-    ctx.font = 'bold 12px monospace';
-    ctx.fillText('CPU', CANVAS_WIDTH / 2 + 122, boardY + 13);
+    // Touch counter pips (Right)
+    this.drawTouchPips(ctx, cardX + cardW - 65, cardY + 34, touches[Team.CPU], '#fb7185');
 
-    if (this.message) {
+    // 2. Active Callout Banner Toast ("PERFECT TOSS!", "SUPER SPIKE!")
+    if (this.calloutTimer > 0) {
+      const alpha = Math.min(1.0, this.calloutTimer / 20);
       ctx.save();
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-      ctx.fillRect(CANVAS_WIDTH / 2 - 120, 80, 240, 40);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(CANVAS_WIDTH / 2 - 120, 80, 240, 40);
-
       ctx.textAlign = 'center';
-      ctx.fillStyle = NES_COLORS.TEXT_YELLOW;
-      ctx.font = 'bold 14px monospace';
-      ctx.fillText(this.message, CANVAS_WIDTH / 2, 95);
+      ctx.textBaseline = 'middle';
 
-      if (this.subMessage) {
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '10px monospace';
-        ctx.fillText(this.subMessage, CANVAS_WIDTH / 2, 110);
-      }
+      const toastY = 82;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+      const toastW = 320;
+      ctx.beginPath();
+      ctx.roundRect((CANVAS_WIDTH - toastW) / 2, toastY - 14, toastW, 30, 8);
+      ctx.fill();
+      ctx.strokeStyle = this.calloutColor;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = this.calloutColor;
+      ctx.font = '800 14px "Outfit", sans-serif';
+      ctx.fillText(this.calloutTitle, CANVAS_WIDTH / 2, toastY);
       ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  private drawTouchPips(ctx: CanvasRenderingContext2D, startX: number, y: number, currentTouches: number, color: string): void {
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = i < currentTouches ? color : 'rgba(255, 255, 255, 0.2)';
+      ctx.beginPath();
+      ctx.arc(startX + i * 16, y, 4, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 }
