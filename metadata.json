@@ -1,7 +1,7 @@
 {
   "name": "volleyball-game",
-  "description": "Neo Volleyball: Grand Slam - Modern Arcade Volleyball Game featuring fluid 2.5D court action, dynamic spikes, tournament mode, and responsive controls.",
-  "prompt": "Modern Arcade Volleyball Game",
+  "description": "スパイクやレシーブを決めて勝利をめざそう。大会モードや練習モードも楽しめるバレーボールゲームです。",
+  "prompt": "日本語のアーケードバレーボールゲーム",
   "capabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

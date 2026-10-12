@@ -126,7 +126,7 @@ export class Court {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
 
-    const text = '★ NEO VOLLEYBALL GRAND SLAM ★ WORLD ARCADE CHAMPIONSHIP ★ POWER SPIKE ★ MONSTER BLOCK ★ ';
+    const text = '★ ネオ・バレーボール ★ 世界大会に挑戦 ★ 強烈なスパイク ★ ナイスブロック ★ ';
     const textWidth = ctx.measureText(text).width;
     const scrollX = -(this.bannerOffset % textWidth);
 

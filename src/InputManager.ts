@@ -44,6 +44,10 @@ export class InputManager {
   private prevPause: boolean = false;
   private pauseRequested: boolean = false;
 
+  private jumpBuffer: number = 0;
+  private actionBuffer: number = 0;
+  private readonly BUFFER_FRAMES: number = 8;
+
   public latestClick: ClickEvent | null = null;
 
   // On-screen Touch Controls
@@ -56,8 +60,8 @@ export class InputManager {
   public dpadCurrentY: number = 425;
   public readonly dpadRadius: number = 55;
 
-  public actionBtn = { x: 840, y: 420, r: 44, label: 'ACTION', isDown: false, touchId: -1 };
-  public jumpBtn = { x: 730, y: 440, r: 38, label: 'JUMP', isDown: false, touchId: -1 };
+  public actionBtn = { x: 840, y: 420, r: 44, label: 'こうどう', isDown: false, touchId: -1 };
+  public jumpBtn = { x: 730, y: 440, r: 38, label: 'ジャンプ', isDown: false, touchId: -1 };
   public pauseBtn = { x: 915, y: 35, r: 22, isDown: false };
 
   constructor(canvas: HTMLCanvasElement) {
@@ -359,11 +363,41 @@ export class InputManager {
     this.state.startPressed = this.state.start && !this.prevStart;
     this.state.pausePressed = this.pauseRequested && !this.prevPause;
 
+    if (this.state.jumpPressed) {
+      this.jumpBuffer = this.BUFFER_FRAMES;
+    } else if (this.jumpBuffer > 0) {
+      this.jumpBuffer--;
+    }
+
+    if (this.state.actionPressed) {
+      this.actionBuffer = this.BUFFER_FRAMES;
+    } else if (this.actionBuffer > 0) {
+      this.actionBuffer--;
+    }
+
     this.prevAction = this.state.action;
     this.prevJump = this.state.jump;
     this.prevStart = this.state.start;
     this.prevPause = this.pauseRequested;
     this.pauseRequested = false;
+  }
+
+  public hasBufferedJump(): boolean {
+    return this.jumpBuffer > 0 || this.state.jumpPressed;
+  }
+
+  public consumeJump(): void {
+    this.jumpBuffer = 0;
+    this.state.jumpPressed = false;
+  }
+
+  public hasBufferedAction(): boolean {
+    return this.actionBuffer > 0 || this.state.actionPressed;
+  }
+
+  public consumeAction(): void {
+    this.actionBuffer = 0;
+    this.state.actionPressed = false;
   }
 
   public consumeClick(): ClickEvent | null {
@@ -434,10 +468,10 @@ export class InputManager {
     ctx.font = '700 13px "Outfit", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('JUMP', jb.x, jb.y - 1);
+    ctx.fillText('ジャンプ', jb.x, jb.y - 1);
     ctx.font = '500 9px "Plus Jakarta Sans", sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.fillText('[K/X]', jb.x, jb.y + 12);
+    ctx.fillText('[K / X]', jb.x, jb.y + 12);
 
     // 3. Action Button (Glowing Vibrant Red/Coral)
     const ab = this.actionBtn;
@@ -456,7 +490,7 @@ export class InputManager {
     ctx.fillText(ab.label, ab.x, ab.y - 3);
     ctx.font = '500 10px "Plus Jakarta Sans", sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.fillText('[SPACE/J]', ab.x, ab.y + 14);
+    ctx.fillText('[SPACE / J]', ab.x, ab.y + 14);
 
     // 4. Pause Button (Top Right Glass Pill)
     const pb = this.pauseBtn;

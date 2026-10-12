@@ -270,7 +270,7 @@ export class Renderer {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
       ctx.fillStyle = '#ffffff';
-      ctx.fillText('1P', pt.x, chevronY - 2);
+      ctx.fillText('じぶん', pt.x, chevronY - 2);
       ctx.restore();
     }
 
@@ -704,27 +704,27 @@ export class Renderer {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
 
-    ctx.font = '900 44px "Outfit", sans-serif';
+    ctx.font = '900 34px "Outfit", sans-serif';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('NEO VOLLEYBALL', 48, 40);
+    ctx.fillText('ネオ・バレーボール', 48, 40);
 
-    ctx.font = '800 18px "Outfit", sans-serif';
+    ctx.font = '800 16px "Outfit", sans-serif';
     ctx.fillStyle = '#38bdf8';
-    ctx.fillText('GRAND SLAM ARCADE', 50, 92);
+    ctx.fillText('グランドスラム・アーケード', 50, 84);
 
     ctx.font = '500 12px "Plus Jakarta Sans", sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
-    ctx.fillText('Reimagined High-Speed 2.5D Volleyball for the Modern Era', 50, 118);
+    ctx.fillText('スパイクを決めて、試合に勝とう！', 50, 107);
 
     // 3. Game Mode Select Tabs
     ctx.font = '700 12px "Plus Jakarta Sans", sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.fillText('SELECT GAME MODE', 50, 156);
+    ctx.fillText('あそびかたをえらぼう', 50, 146);
 
     const modes = [
-      { id: GameMode.QUICK, title: 'QUICK MATCH', desc: 'Instant 1-Match Exhibition vs CPU' },
-      { id: GameMode.TOURNAMENT, title: 'TOURNAMENT', desc: '3-Round Championship Cup' },
-      { id: GameMode.PRACTICE, title: 'PRACTICE RALLY', desc: 'Endless Spike & Receive Training' }
+      { id: GameMode.QUICK, title: 'すぐに試合', desc: '1試合をすぐにプレイ' },
+      { id: GameMode.TOURNAMENT, title: '大会に挑戦', desc: '3回勝ち抜いて優勝をめざそう' },
+      { id: GameMode.PRACTICE, title: 'れんしゅう', desc: 'サーブ・レシーブ・スパイクの練習' }
     ];
 
     modes.forEach((m, idx) => {
@@ -753,9 +753,9 @@ export class Renderer {
     const settingsY = 360;
     ctx.font = '700 11px "Plus Jakarta Sans", sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.fillText('DIFFICULTY', 50, settingsY);
-    ctx.fillText('TARGET SCORE', 200, settingsY);
-    ctx.fillText('AUDIO', 320, settingsY);
+    ctx.fillText('むずかしさ', 50, settingsY);
+    ctx.fillText('目標得点', 200, settingsY);
+    ctx.fillText('音', 320, settingsY);
 
     // Difficulty Button
     ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
@@ -766,7 +766,12 @@ export class Renderer {
     ctx.stroke();
     ctx.font = '800 12px "Outfit", sans-serif';
     ctx.fillStyle = '#38bdf8';
-    ctx.fillText(difficulty, 64, settingsY + 22);
+    const difficultyLabel: Record<string, string> = {
+      CASUAL: 'かんたん',
+      PRO: 'ふつう',
+      MASTER: 'むずかしい'
+    };
+    ctx.fillText(difficultyLabel[difficulty] || difficulty, 64, settingsY + 22);
 
     // Target Score Button
     ctx.beginPath();
@@ -774,7 +779,7 @@ export class Renderer {
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#facc15';
-    ctx.fillText(`${targetScore} PTS`, 216, settingsY + 22);
+    ctx.fillText(`${targetScore}点`, 216, settingsY + 22);
 
     // Audio Button
     ctx.beginPath();
@@ -782,9 +787,9 @@ export class Renderer {
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = isSoundMuted ? '#f43f5e' : '#34d399';
-    ctx.fillText(isSoundMuted ? 'MUTED' : 'ON', 336, settingsY + 22);
+    ctx.fillText(isSoundMuted ? 'オフ' : 'オン', 336, settingsY + 22);
 
-    // 5. Big "START MATCH" CTA Button
+    // 5. Start match button
     const startBtnY = 430;
     const btnGrad = ctx.createLinearGradient(50, startBtnY, 410, startBtnY);
     btnGrad.addColorStop(0, '#f43f5e');
@@ -801,37 +806,42 @@ export class Renderer {
     ctx.textAlign = 'center';
     ctx.font = '900 18px "Outfit", sans-serif';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('START MATCH  ►', 230, startBtnY + 16);
+    ctx.fillText('試合スタート  ►', 230, startBtnY + 16);
 
     ctx.font = '500 10px "Plus Jakarta Sans", sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.fillText('PRESS SPACE / TAP SCREEN TO BEGIN', 230, startBtnY + 36);
+    ctx.fillText('スペースキー または 画面タップ', 230, startBtnY + 36);
 
-    // 6. Controls Legend (Right Side)
-    const ctrlX = CANVAS_WIDTH - 280;
-    const ctrlY = 320;
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+    // 6. Controls & Rules Guide (Right Side)
+    const ctrlX = CANVAS_WIDTH - 290;
+    const ctrlY = 300;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
     ctx.beginPath();
-    ctx.roundRect(ctrlX, ctrlY, 235, 175, 10);
+    ctx.roundRect(ctrlX, ctrlY, 250, 195, 10);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.stroke();
 
     ctx.textAlign = 'left';
     ctx.font = '800 12px "Outfit", sans-serif';
     ctx.fillStyle = '#38bdf8';
-    ctx.fillText('CONTROLS GUIDE', ctrlX + 16, ctrlY + 16);
+    ctx.fillText('あそびかた・ルール', ctrlX + 16, ctrlY + 16);
+
+    ctx.font = '700 10px "Plus Jakarta Sans", sans-serif';
+    ctx.fillStyle = '#facc15';
+    ctx.fillText('6人でプレイ（前3人・後ろ3人）', ctrlX + 16, ctrlY + 38);
+    ctx.fillText('3回まで：レシーブ→トス→スパイク', ctrlX + 16, ctrlY + 54);
 
     ctx.font = '600 11px "Plus Jakarta Sans", sans-serif';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('MOVE: Arrow Keys / WASD', ctrlX + 16, ctrlY + 44);
-    ctx.fillText('ACTION: Space / J / Left Click', ctrlX + 16, ctrlY + 70);
-    ctx.fillText('JUMP: K / X', ctrlX + 16, ctrlY + 96);
-    ctx.fillText('PAUSE: Esc / P / Pause Icon', ctrlX + 16, ctrlY + 122);
+    ctx.fillText('移動：矢印キー または WASD', ctrlX + 16, ctrlY + 80);
+    ctx.fillText('アクション：Space / J / クリック', ctrlX + 16, ctrlY + 104);
+    ctx.fillText('ジャンプ：K / X', ctrlX + 16, ctrlY + 128);
+    ctx.fillText('一時停止：Esc / P', ctrlX + 16, ctrlY + 152);
 
     ctx.font = '500 10px "Plus Jakarta Sans", sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.fillText('Touch screen: Virtual pad & buttons', ctrlX + 16, ctrlY + 148);
+    ctx.fillText('スマホは画面のボタンで操作', ctrlX + 16, ctrlY + 174);
 
     ctx.restore();
   }
@@ -859,10 +869,10 @@ export class Renderer {
     ctx.textAlign = 'center';
     ctx.font = '900 24px "Outfit", sans-serif';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('GAME PAUSED', CANVAS_WIDTH / 2, y + 42);
+    ctx.fillText('一時停止', CANVAS_WIDTH / 2, y + 42);
 
     // Buttons
-    const buttons = ['RESUME (ESC)', 'RESTART SET', 'SOUND TOGGLE', 'EXIT TO TITLE'];
+    const buttons = ['つづける（Esc）', '試合をやりなおす', '音のオン・オフ', 'タイトルにもどる'];
     buttons.forEach((lbl, idx) => {
       const by = y + 70 + idx * 42;
       ctx.fillStyle = idx === 0 ? 'rgba(2, 132, 199, 0.8)' : 'rgba(255, 255, 255, 0.08)';
@@ -912,11 +922,11 @@ export class Renderer {
     // Title Banner
     ctx.font = '900 32px "Outfit", sans-serif';
     ctx.fillStyle = isPlayerWin ? '#facc15' : '#f43f5e';
-    ctx.fillText(isPlayerWin ? (isChampionship ? 'TOURNAMENT CHAMPIONS!' : 'MATCH VICTORY!') : 'DEFEAT', CANVAS_WIDTH / 2, y + 46);
+    ctx.fillText(isPlayerWin ? (isChampionship ? '大会優勝！' : '試合に勝った！') : '試合に負けた…', CANVAS_WIDTH / 2, y + 46);
 
     ctx.font = '600 13px "Plus Jakarta Sans", sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.fillText(isPlayerWin ? 'Outstanding performance on the court!' : 'Good rally! Ready for a rematch?', CANVAS_WIDTH / 2, y + 74);
+    ctx.fillText(isPlayerWin ? 'すばらしいプレー！' : 'おしい！もう一度チャレンジしよう！', CANVAS_WIDTH / 2, y + 74);
 
     // Optional Trophy illustration if tournament won
     if (isChampionship && this.trophyImg && this.trophyImg.complete) {
@@ -933,13 +943,13 @@ export class Renderer {
     ctx.textAlign = 'left';
     ctx.font = '800 12px "Outfit", sans-serif';
     ctx.fillStyle = '#38bdf8';
-    ctx.fillText('MATCH PERFORMANCE STATS', x + 40, statY + 24);
+    ctx.fillText('試合の記録', x + 40, statY + 24);
 
     const rows = [
-      { label: 'Successful Spikes', val: stats.spikes },
-      { label: 'Monster Blocks', val: stats.blocks },
-      { label: 'Service Aces', val: stats.aces },
-      { label: 'Longest Continuous Rally', val: `${stats.longestRally} Hits` }
+      { label: 'スパイク', val: stats.spikes },
+      { label: 'ブロック', val: stats.blocks },
+      { label: 'サービスエース', val: stats.aces },
+      { label: 'ラリーの最多タッチ数', val: `${stats.longestRally}回` }
     ];
 
     rows.forEach((r, idx) => {
@@ -968,7 +978,7 @@ export class Renderer {
     ctx.textAlign = 'center';
     ctx.font = '800 14px "Outfit", sans-serif';
     ctx.fillStyle = '#ffffff';
-    const btnLabel = isTournament && isPlayerWin && roundIndex < 2 ? 'NEXT ROUND ►' : 'PLAY AGAIN ►';
+    const btnLabel = isTournament && isPlayerWin && roundIndex < 2 ? '次のラウンドへ ►' : 'もう一度プレイ ►';
     ctx.fillText(btnLabel, CANVAS_WIDTH / 2, btnY + 25);
 
     ctx.restore();

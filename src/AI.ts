@@ -25,10 +25,10 @@ export class AIController {
     playerTeam: Player[],
     ball: Ball,
     onCpuServe: () => void,
-    onCpuHit: (player: Player, type: 'receive' | 'toss' | 'spike' | 'block') => void
+    onCpuHit: (player: Player, type: 'receive' | 'toss' | 'spike' | 'block' | 'over') => void
   ): void {
-    const isBallInCpuCourt = ball.x >= NET_X - 20 && ball.x <= COURT_RIGHT + 60;
     const prediction = Physics.predictLanding(ball);
+    const isBallInCpuCourt = (ball.x >= NET_X - 35 || (prediction.x >= NET_X && ball.vx > 0.5)) && ball.inPlay;
 
     // 1. Handle CPU Serve
     const server = cpuPlayers.find(p => p.state === PlayerState.SERVE_PREPARE);
@@ -39,12 +39,17 @@ export class AIController {
       return;
     }
 
-    // 2. Defensive Blocking at the Net
-    const isHumanSpiking = playerTeam.some(p => p.state === PlayerState.SPIKE || (p.role === 'spiker' && !p.isGrounded));
-    if (isHumanSpiking && ball.x < NET_X && ball.x > NET_X - 140) {
-      const blockers = cpuPlayers.filter(p => p.x < NET_X + 90 && p.isGrounded);
-      for (const blocker of blockers) {
-        const blockProbability = this.difficulty === 'MASTER' ? 0.75 : (this.difficulty === 'PRO' ? 0.5 : 0.2);
+    // 2. Defensive Blocking at the Net by Front-Line Players
+    // IMPORTANT: Blocking a serve is strictly illegal under FIVB Rule 14.1.3.
+    // Blocking is only permitted against active rally attacks (3rd touch spike or attack after serve receive).
+    const isServeInFlight = ball.isServed || ball.touches[Team.PLAYER] === 0;
+    const isRallyAttack = !isServeInFlight && ball.inPlay && ball.touches[Team.PLAYER] >= 2;
+    const isHumanSpiking = isRallyAttack && playerTeam.some(p => p.isFrontLine && (p.state === PlayerState.SPIKE || (!p.isGrounded && ball.x > NET_X - 150)));
+
+    if (isHumanSpiking && ball.x < NET_X && ball.x > NET_X - 130) {
+      const frontBlockers = cpuPlayers.filter(p => p.isFrontLine && p.isGrounded && p.x < NET_X + 110);
+      for (const blocker of frontBlockers) {
+        const blockProbability = this.difficulty === 'MASTER' ? 0.70 : (this.difficulty === 'PRO' ? 0.48 : 0.25);
         if (Math.random() < blockProbability) {
           blocker.triggerBlock();
           break;
@@ -58,22 +63,22 @@ export class AIController {
 
     if (isBallInCpuCourt && ball.inPlay) {
       if (cpuTouches === 0) {
-        // Receivers first
-        const receivers = cpuPlayers.filter(p => p.role === 'receiver');
-        activePlayer = this.getClosestToTarget(receivers, prediction.x, prediction.depth) || cpuPlayers[0];
+        // Receivers first (prioritize back-line defenders or closest player)
+        const receivers = cpuPlayers.filter(p => !p.isFrontLine);
+        activePlayer = this.getClosestToTarget(receivers.length > 0 ? receivers : cpuPlayers, prediction.x, prediction.depth);
       } else if (cpuTouches === 1) {
         // Setter takes 2nd touch
-        activePlayer = cpuPlayers.find(p => p.role === 'setter') || cpuPlayers[0];
+        activePlayer = cpuPlayers.find(p => p.role === 'setter') || cpuPlayers[2] || cpuPlayers[0];
       } else {
-        // Spiker takes 3rd touch
-        const spikers = cpuPlayers.filter(p => p.role === 'spiker');
-        activePlayer = this.getClosestToTarget(spikers, prediction.x, prediction.depth) || cpuPlayers[1];
+        // Front-line spikers take 3rd touch
+        const spikers = cpuPlayers.filter(p => p.isFrontLine && p.role === 'spiker');
+        activePlayer = this.getClosestToTarget(spikers.length > 0 ? spikers : cpuPlayers, prediction.x, prediction.depth);
       }
     }
 
-    // Speed and precision by difficulty
-    const speedMult = this.difficulty === 'MASTER' ? 1.05 : (this.difficulty === 'PRO' ? 0.92 : 0.78);
-    const posTolerance = this.difficulty === 'MASTER' ? 8 : (this.difficulty === 'PRO' ? 14 : 22);
+    // Speed and precision by difficulty (boosted for competitive responsiveness)
+    const speedMult = this.difficulty === 'MASTER' ? 1.25 : (this.difficulty === 'PRO' ? 1.10 : 0.92);
+    const posTolerance = this.difficulty === 'MASTER' ? 8 : (this.difficulty === 'PRO' ? 12 : 18);
 
     // 4. Update each CPU player movement & state
     for (const p of cpuPlayers) {
@@ -94,26 +99,34 @@ export class AIController {
         }
 
         const hand = p.getHandPos();
-        const dist = Math.hypot(ball.x - hand.x, ball.y - hand.y, (ball.depth - p.depth) * 85);
+        // Depth penalty 50 matches Physics.ts hit detection
+        const dist = Math.hypot(ball.x - hand.x, ball.y - hand.y, (ball.depth - p.depth) * 50);
 
         // Action trigger based on touch count
         if (cpuTouches === 0 && ball.framesSinceHit >= 6) {
-          if (dist < 48 && ball.y > FLOOR_Y - 140) {
+          if (dist < 64 && ball.y > FLOOR_Y - 180) {
             p.triggerReceive();
             onCpuHit(p, 'receive');
+          } else if (dist >= 64 && dist < 100 && ball.y > FLOOR_Y - 90 && Math.abs(diffX) > 30) {
+            p.triggerDive();
           }
         } else if (cpuTouches === 1 && ball.framesSinceHit >= 8) {
-          if (dist < 44 && ball.y > FLOOR_Y - 120) {
+          if (dist < 58 && ball.y > FLOOR_Y - 150) {
             p.triggerToss();
             onCpuHit(p, 'toss');
           }
-        } else if (cpuTouches === 2) {
-          // Time the spike jump: jump when ball is descending into spike zone
-          const shouldJumpToSpike = ball.vy > 0 && ball.y > FLOOR_Y - 220 && ball.y < FLOOR_Y - 130 && Math.abs(diffX) < 40;
+        } else if (cpuTouches >= 2) {
+          // 3rd Touch: Spike if in air, or chance-ball return over net if on ground
+          // Initiate jump earlier while toss approaches or peaks
+          const shouldJumpToSpike = ball.y > FLOOR_Y - 260 && ball.y < FLOOR_Y - 130 && Math.abs(diffX) < 55;
           if (shouldJumpToSpike && p.isGrounded) {
             p.triggerSpike();
-          } else if (!p.isGrounded && dist < 50) {
+          } else if (!p.isGrounded && dist < 62) {
             onCpuHit(p, 'spike');
+          } else if (p.isGrounded && dist < 58 && ball.y > FLOOR_Y - 140) {
+            // Must return ball over net safely to player court!
+            p.triggerReceive();
+            onCpuHit(p, 'over');
           }
         }
       } else {
@@ -135,7 +148,7 @@ export class AIController {
     let closest = players[0];
     let minD = 99999;
     for (const p of players) {
-      const d = Math.hypot(p.x - tx, (p.depth - tDepth) * 85);
+      const d = Math.hypot(p.x - tx, (p.depth - tDepth) * 50);
       if (d < minD) {
         minD = d;
         closest = p;

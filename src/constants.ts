@@ -40,6 +40,8 @@ export const JUMP_IMPULSE = -8.6;
 
 // Rules
 export const MAX_TOUCHES = 3;
+export type RallyEndReason = 'in' | 'out' | 'four_hits' | 'double_contact' | 'net_touch' | 'illegal_block';
+
 
 // Teams
 export enum Team {
@@ -116,7 +118,7 @@ export const MODERN_PALETTE = {
 
   // Team 1: Thunder Cyan (Player)
   TEAM_PLAYER: {
-    name: 'THUNDER FALCONS',
+    name: 'サンダー・ファルコンズ',
     jerseyPrimary: '#0284c7', // Cyan / Sky Blue
     jerseySecondary: '#0369a1',
     jerseyNumber: '#ffffff',
@@ -129,7 +131,7 @@ export const MODERN_PALETTE = {
 
   // Team 2: Blaze Tigers (CPU default)
   TEAM_CPU: {
-    name: 'BLAZE TIGERS',
+    name: 'ブレイズ・タイガース',
     jerseyPrimary: '#e11d48', // Crimson Red
     jerseySecondary: '#be123c',
     jerseyNumber: '#fef08a',
@@ -143,8 +145,8 @@ export const MODERN_PALETTE = {
   // Rival Teams for Tournament
   TOURNAMENT_TEAMS: [
     {
-      name: 'TOKYO WAVES',
-      city: 'Tokyo, Japan',
+      name: '東京ウェーブス',
+      city: '東京',
       jerseyPrimary: '#059669', // Emerald Green
       jerseySecondary: '#047857',
       jerseyNumber: '#ffffff',
@@ -156,8 +158,8 @@ export const MODERN_PALETTE = {
       difficulty: 'CASUAL' as const
     },
     {
-      name: 'RIO SUNSET',
-      city: 'Rio de Janeiro, Brazil',
+      name: 'リオ・サンセット',
+      city: 'リオデジャネイロ',
       jerseyPrimary: '#d97706', // Sunset Amber
       jerseySecondary: '#b45309',
       jerseyNumber: '#1e293b',
@@ -169,8 +171,8 @@ export const MODERN_PALETTE = {
       difficulty: 'PRO' as const
     },
     {
-      name: 'MILANO TITANS',
-      city: 'Milano, Italy',
+      name: 'ミラノ・タイタンズ',
+      city: 'ミラノ',
       jerseyPrimary: '#7c3aed', // Purple Violet
       jerseySecondary: '#6d28d9',
       jerseyNumber: '#ffffff',

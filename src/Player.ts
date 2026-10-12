@@ -12,12 +12,68 @@ import {
   COURT_RIGHT
 } from './constants';
 
+export interface SlotConfig {
+  x: number;
+  depth: number;
+  role: 'setter' | 'spiker' | 'receiver' | 'server';
+  isFrontLine: boolean;
+}
+
+export function getSlotConfig(slot: number, team: Team): SlotConfig {
+  const isPlayer = team === Team.PLAYER;
+  // Volleyball 6-player rotation slots:
+  // Slot 1: Back-Right (Server)
+  // Slot 2: Front-Right (Attacker / Blocker)
+  // Slot 3: Front-Center (Setter / Middle)
+  // Slot 4: Front-Left (Attacker / Blocker)
+  // Slot 5: Back-Left (Receiver)
+  // Slot 6: Back-Center (Receiver / Libero)
+  if (isPlayer) {
+    switch (slot) {
+      case 1:
+        return { x: 230, depth: 0.78, role: 'server', isFrontLine: false };
+      case 2:
+        return { x: 380, depth: 0.78, role: 'spiker', isFrontLine: true };
+      case 3:
+        return { x: 410, depth: 0.50, role: 'setter', isFrontLine: true };
+      case 4:
+        return { x: 380, depth: 0.22, role: 'spiker', isFrontLine: true };
+      case 5:
+        return { x: 230, depth: 0.22, role: 'receiver', isFrontLine: false };
+      case 6:
+        return { x: 175, depth: 0.50, role: 'receiver', isFrontLine: false };
+      default:
+        return { x: 230, depth: 0.50, role: 'receiver', isFrontLine: false };
+    }
+  } else {
+    // CPU Team (mirrored across net at NET_X = 480)
+    switch (slot) {
+      case 1:
+        return { x: 730, depth: 0.22, role: 'server', isFrontLine: false };
+      case 2:
+        return { x: 580, depth: 0.22, role: 'spiker', isFrontLine: true };
+      case 3:
+        return { x: 550, depth: 0.50, role: 'setter', isFrontLine: true };
+      case 4:
+        return { x: 580, depth: 0.78, role: 'spiker', isFrontLine: true };
+      case 5:
+        return { x: 730, depth: 0.78, role: 'receiver', isFrontLine: false };
+      case 6:
+        return { x: 785, depth: 0.50, role: 'receiver', isFrontLine: false };
+      default:
+        return { x: 730, depth: 0.50, role: 'receiver', isFrontLine: false };
+    }
+  }
+}
+
 export class Player {
   public id: number;
   public team: Team;
-  public x: number;
-  public y: number;
-  public depth: number;
+  public slot: number = 1;
+  public isFrontLine: boolean = false;
+  public x: number = 0;
+  public y: number = 0;
+  public depth: number = 0.5;
   public vx: number = 0;
   public vy: number = 0;
   public width: number = PLAYER_WIDTH;
@@ -27,9 +83,9 @@ export class Player {
   public isGrounded: boolean = true;
   public isControlled: boolean = false;
 
-  public homeX: number;
-  public homeDepth: number;
-  public targetX: number;
+  public homeX: number = 0;
+  public homeDepth: number = 0.5;
+  public targetX: number = 0;
   public jerseyNumber: number;
 
   public role: 'setter' | 'spiker' | 'receiver' | 'server' = 'receiver';
@@ -42,22 +98,34 @@ export class Player {
   constructor(
     id: number,
     team: Team,
-    homeX: number,
-    role: 'setter' | 'spiker' | 'receiver' | 'server',
-    depth: number = 0.5,
+    slot: number = 1,
     jerseyNumber: number = 1
   ) {
     this.id = id;
     this.team = team;
-    this.homeX = homeX;
-    this.targetX = homeX;
-    this.depth = depth;
-    this.homeDepth = depth;
-    this.x = homeX;
-    this.y = FLOOR_Y - this.height;
-    this.role = role;
     this.jerseyNumber = jerseyNumber;
     this.facing = team === Team.PLAYER ? 1 : -1;
+    this.applySlot(slot);
+    this.x = this.homeX;
+    this.depth = this.homeDepth;
+    this.y = FLOOR_Y - this.height;
+  }
+
+  public applySlot(slot: number): void {
+    this.slot = slot;
+    const config = getSlotConfig(slot, this.team);
+    this.homeX = config.x;
+    this.homeDepth = config.depth;
+    this.role = config.role;
+    this.isFrontLine = config.isFrontLine;
+    this.targetX = config.x;
+  }
+
+  public rotateClockwise(): void {
+    // Rotation: 1 -> 6 -> 5 -> 4 -> 3 -> 2 -> 1
+    const nextSlot = this.slot === 1 ? 6 : this.slot - 1;
+    this.applySlot(nextSlot);
+    this.resetPosition();
   }
 
   public resetPosition(): void {
@@ -74,6 +142,7 @@ export class Player {
     this.stateTimer = 0;
     this.animTimer = 0;
   }
+
 
   public setServePosition(isServer: boolean): void {
     this.depth = this.homeDepth;
@@ -184,10 +253,10 @@ export class Player {
 
   public triggerSpike(): void {
     if (this.isGrounded) {
-      this.jump(1.05);
+      this.jump(1.15); // Powerful full jump for attack
     }
     this.state = PlayerState.SPIKE;
-    this.stateTimer = 22;
+    this.stateTimer = 45; // Maintain spike state through peak airborne phase
   }
 
   public triggerReceive(): void {
@@ -237,11 +306,14 @@ export class Player {
 
     switch (this.state) {
       case PlayerState.SPIKE:
-        // High reach above head
-        return { x: forwardX + 6, y: this.y - 12 };
+        // High reach above head - wide reach upward
+        return { x: forwardX + 8, y: this.y - 18 };
       case PlayerState.BLOCK:
         // Directly overhead
         return { x: centerX + this.facing * 8, y: this.y - 14 };
+      case PlayerState.JUMP:
+        // Airborne preparation reach
+        return { x: forwardX + 6, y: this.y - 12 };
       case PlayerState.TOSS:
         // Forehead level
         return { x: centerX + this.facing * 6, y: this.y + 4 };

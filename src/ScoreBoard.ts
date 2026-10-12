@@ -1,4 +1,4 @@
-import { CANVAS_WIDTH, GameMode, Team } from './constants';
+import { CANVAS_WIDTH, GameMode, RallyEndReason, Team } from './constants';
 
 export interface MatchStats {
   spikes: number;
@@ -20,7 +20,7 @@ export class ScoreBoard {
     [Team.CPU]: 0
   };
 
-  public winScore: number = 11;
+  public winScore: number = 25;
   public isDeuce: boolean = false;
   public isMatchPoint: boolean = false;
   public isGameOver: boolean = false;
@@ -89,7 +89,7 @@ export class ScoreBoard {
     }
   }
 
-  public handleRallyEnd(winningTeam: Team, reason: 'in' | 'out' | 'touch_out'): {
+  public handleRallyEnd(winningTeam: Team, reason: RallyEndReason): {
     isPoint: boolean;
     gameEnded: boolean;
   } {
@@ -159,7 +159,7 @@ export class ScoreBoard {
     ctx.textBaseline = 'middle';
     ctx.font = '800 13px "Outfit", sans-serif';
     ctx.fillStyle = '#38bdf8';
-    ctx.fillText('FALCONS', cardX + 16, cardY + 18);
+    ctx.fillText('じぶん', cardX + 16, cardY + 18);
 
     // Serve indicator dot
     if (this.serveTeam === Team.PLAYER) {
@@ -182,11 +182,11 @@ export class ScoreBoard {
     ctx.textAlign = 'center';
     ctx.font = '600 10px "Plus Jakarta Sans", sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.fillText(`TARGET: ${this.winScore}`, cardX + cardW / 2, cardY + 18);
+    ctx.fillText(`目標 ${this.winScore}点`, cardX + cardW / 2, cardY + 18);
 
     ctx.font = '700 11px "Outfit", sans-serif';
     ctx.fillStyle = this.isDeuce ? '#f43f5e' : (this.isMatchPoint ? '#facc15' : '#94a3b8');
-    ctx.fillText(this.isDeuce ? 'DEUCE' : (this.isMatchPoint ? 'MATCH POINT' : 'VS'), cardX + cardW / 2, cardY + 32);
+    ctx.fillText(this.isDeuce ? 'デュース' : (this.isMatchPoint ? 'マッチポイント' : '対戦中'), cardX + cardW / 2, cardY + 32);
 
     // CPU Score (Right)
     ctx.font = '900 28px "Outfit", sans-serif';
@@ -198,7 +198,7 @@ export class ScoreBoard {
     ctx.textAlign = 'right';
     ctx.font = '800 13px "Outfit", sans-serif';
     ctx.fillStyle = '#fb7185';
-    ctx.fillText('OPPONENT', cardX + cardW - 16, cardY + 18);
+    ctx.fillText('あいて', cardX + cardW - 16, cardY + 18);
 
     // Serve indicator dot (Right)
     if (this.serveTeam === Team.CPU) {
@@ -211,18 +211,19 @@ export class ScoreBoard {
     // Touch counter pips (Right)
     this.drawTouchPips(ctx, cardX + cardW - 65, cardY + 34, touches[Team.CPU], '#fb7185');
 
-    // 2. Active Callout Banner Toast ("PERFECT TOSS!", "SUPER SPIKE!")
+    // 2. Active callout banner and rally result reason
     if (this.calloutTimer > 0) {
       const alpha = Math.min(1.0, this.calloutTimer / 20);
       ctx.save();
+      ctx.globalAlpha = alpha;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      const toastY = 82;
+      const toastY = 88;
       ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-      const toastW = 320;
+      const toastW = 390;
       ctx.beginPath();
-      ctx.roundRect((CANVAS_WIDTH - toastW) / 2, toastY - 14, toastW, 30, 8);
+      ctx.roundRect((CANVAS_WIDTH - toastW) / 2, toastY - 20, toastW, 42, 8);
       ctx.fill();
       ctx.strokeStyle = this.calloutColor;
       ctx.lineWidth = 1.5;
@@ -230,7 +231,12 @@ export class ScoreBoard {
 
       ctx.fillStyle = this.calloutColor;
       ctx.font = '800 14px "Outfit", sans-serif';
-      ctx.fillText(this.calloutTitle, CANVAS_WIDTH / 2, toastY);
+      ctx.fillText(this.calloutTitle, CANVAS_WIDTH / 2, this.calloutSubtitle ? toastY - 7 : toastY);
+      if (this.calloutSubtitle) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '600 10px "Plus Jakarta Sans", sans-serif';
+        ctx.fillText(this.calloutSubtitle, CANVAS_WIDTH / 2, toastY + 9);
+      }
       ctx.restore();
     }
 

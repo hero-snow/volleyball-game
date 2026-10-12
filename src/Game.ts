@@ -6,11 +6,13 @@ import {
   FLOOR_Y,
   GameMode,
   GameState,
+  MAX_TOUCHES,
   MODERN_PALETTE,
   NET_X,
   PLAYER_ATTACK_X,
   CPU_ATTACK_X,
   PlayerState,
+  RallyEndReason,
   Team,
   projectCourtPosition
 } from './constants';
@@ -47,8 +49,8 @@ export class Game {
   public currentMode: GameMode = GameMode.QUICK;
   public difficultyIndex: number = 1;
   private readonly difficulties: AIDifficulty[] = ['CASUAL', 'PRO', 'MASTER'];
-  public targetScores: number[] = [7, 11, 15];
-  public targetScoreIndex: number = 1; // Default 11
+  public targetScores: number[] = [15, 25];
+  public targetScoreIndex: number = 1; // Default 25 pts (standard volleyball set)
 
   private serverPlayer: Player | null = null;
   private currentOpponentPalette = MODERN_PALETTE.TEAM_CPU;
@@ -74,26 +76,40 @@ export class Game {
   }
 
   private initTeams(): void {
-    // 4 Players per team on court for clean arcade flow:
-    // 0: Server / Back Left Receiver
-    // 1: Spiker (Left wing attacker)
-    // 2: Setter (Center net orchestrator)
-    // 3: Spiker / Blocker (Right wing attacker)
+    // 6-player Volleyball Team Formation (Front 3, Back 3):
+    // Slot 1: Back-Right (Server)
+    // Slot 2: Front-Right (Attacker / Blocker)
+    // Slot 3: Front-Center (Setter)
+    // Slot 4: Front-Left (Attacker / Blocker)
+    // Slot 5: Back-Left (Receiver)
+    // Slot 6: Back-Center (Receiver / Defense)
     this.playerTeam = [
-      new Player(0, Team.PLAYER, 190, 'server', 0.65, 7),
-      new Player(1, Team.PLAYER, 360, 'spiker', 0.32, 10),
-      new Player(2, Team.PLAYER, 400, 'setter', 0.5, 2),
-      new Player(3, Team.PLAYER, 350, 'spiker', 0.75, 4)
+      new Player(0, Team.PLAYER, 1, 1),
+      new Player(1, Team.PLAYER, 2, 4),
+      new Player(2, Team.PLAYER, 3, 2),
+      new Player(3, Team.PLAYER, 4, 7),
+      new Player(4, Team.PLAYER, 5, 5),
+      new Player(5, Team.PLAYER, 6, 9)
     ];
 
     this.cpuTeam = [
-      new Player(0, Team.CPU, 770, 'server', 0.65, 1),
-      new Player(1, Team.CPU, 600, 'spiker', 0.32, 9),
-      new Player(2, Team.CPU, 560, 'setter', 0.5, 3),
-      new Player(3, Team.CPU, 610, 'spiker', 0.75, 8)
+      new Player(0, Team.CPU, 1, 1),
+      new Player(1, Team.CPU, 2, 4),
+      new Player(2, Team.CPU, 3, 2),
+      new Player(3, Team.CPU, 4, 7),
+      new Player(4, Team.CPU, 5, 5),
+      new Player(5, Team.CPU, 6, 9)
     ];
 
     this.updateTournamentOpponent();
+  }
+
+  private rotateTeam(team: Team): void {
+    const players = team === Team.PLAYER ? this.playerTeam : this.cpuTeam;
+    players.forEach(p => p.rotateClockwise());
+    if (team === Team.PLAYER) {
+      this.scoreBoard.triggerCallout('ローテーション！', '選手の位置が入れ替わるよ', '#38bdf8');
+    }
   }
 
   private updateTournamentOpponent(): void {
@@ -247,22 +263,26 @@ export class Game {
       p.isControlled = false;
     });
 
-    const serverIndex = 0;
-    this.playerTeam.forEach((p, idx) => p.setServePosition(isPlayerServe && idx === serverIndex));
-    this.cpuTeam.forEach((p, idx) => p.setServePosition(!isPlayerServe && idx === serverIndex));
+    const playerServer = this.playerTeam.find(p => p.slot === 1) || this.playerTeam[0];
+    const cpuServer = this.cpuTeam.find(p => p.slot === 1) || this.cpuTeam[0];
+
+    this.playerTeam.forEach(p => p.setServePosition(isPlayerServe && p === playerServer));
+    this.cpuTeam.forEach(p => p.setServePosition(!isPlayerServe && p === cpuServer));
 
     if (isPlayerServe) {
-      this.serverPlayer = this.playerTeam[0];
+      this.serverPlayer = playerServer;
       this.controlledPlayer = this.serverPlayer;
       this.controlledPlayer.isControlled = true;
       this.ball.reset(this.serverPlayer.x + 16, this.serverPlayer.y + 20, this.serverPlayer.depth);
-      this.input.setActionLabel('TOSS');
+      this.input.setActionLabel('トス');
     } else {
-      this.serverPlayer = this.cpuTeam[0];
-      this.controlledPlayer = this.playerTeam[1]; // Spiker/Receiver ready
+      this.serverPlayer = cpuServer;
+      // When receiving, control back-center receiver
+      const receiver = this.playerTeam.find(p => p.slot === 6) || this.playerTeam[0];
+      this.controlledPlayer = receiver;
       this.controlledPlayer.isControlled = true;
       this.ball.reset(this.serverPlayer.x - 16, this.serverPlayer.y + 20, this.serverPlayer.depth);
-      this.input.setActionLabel('RECEIVE');
+      this.input.setActionLabel('レシーブ');
     }
 
     this.stateTimer = isPlayerServe ? 0 : 50;
@@ -277,7 +297,8 @@ export class Game {
       this.ball.depth = this.serverPlayer!.depth;
 
       // Player tosses the ball up for serve
-      if (this.input.state.actionPressed || this.input.state.startPressed) {
+      if (this.input.hasBufferedAction() || this.input.state.actionPressed || this.input.state.startPressed) {
+        this.input.consumeAction();
         this.state = GameState.SERVE_IN_AIR;
         this.ball.inPlay = true;
         this.ball.isServed = true;
@@ -285,7 +306,7 @@ export class Game {
         this.ball.vx = 0.5;
         this.serverPlayer!.state = PlayerState.SERVE_TOSS;
         this.sound.playBallHit('toss');
-        this.input.setActionLabel('SPIKE!');
+        this.input.setActionLabel('サーブ');
       }
     } else {
       // CPU server automatically tosses
@@ -310,13 +331,15 @@ export class Game {
 
     if (isPlayerServe) {
       // Player jumps and hits serve at peak
-      if (this.input.state.jumpPressed && this.serverPlayer!.isGrounded) {
+      if ((this.input.hasBufferedJump() || this.input.state.jumpPressed) && this.serverPlayer!.isGrounded) {
+        this.input.consumeJump();
         this.serverPlayer!.jump(1.05);
       }
 
-      if (this.input.state.actionPressed) {
+      if (this.input.hasBufferedAction() || this.input.state.actionPressed) {
         const canHit = this.ball.y > this.serverPlayer!.y - 30 && this.ball.y < this.serverPlayer!.y + 40;
         if (canHit) {
+          this.input.consumeAction();
           const isJumpServe = !this.serverPlayer!.isGrounded;
           const targetX = 640 + Math.random() * 120;
           const targetDepth = 0.2 + Math.random() * 0.6;
@@ -328,7 +351,7 @@ export class Game {
           this.court.triggerFlash();
 
           this.state = GameState.RALLY;
-          this.input.setActionLabel('PASS');
+          this.input.setActionLabel('パス');
           this.autoSwitchPlayer();
         }
       }
@@ -354,7 +377,7 @@ export class Game {
         this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, false);
 
         this.state = GameState.RALLY;
-        this.input.setActionLabel('RECEIVE');
+        this.input.setActionLabel('レシーブ');
         this.autoSwitchPlayer();
       }
     }
@@ -365,10 +388,28 @@ export class Game {
     this.ball.update();
     Physics.checkNetCollision(this.ball);
 
-    // 1. Move Controlled Player
+    // 1. Check Net Touch Violation
+    const netTouch = Physics.checkNetTouch([...this.playerTeam, ...this.cpuTeam]);
+    if (netTouch.hasFoul && netTouch.fouledPlayer) {
+      const scoringTeam = netTouch.fouledPlayer.team === Team.PLAYER ? Team.CPU : Team.PLAYER;
+      this.handlePointAward(scoringTeam, 'net_touch');
+      return;
+    }
+
+    // 2. Enforce 3-Touch Maximum Rule (Four Hits Fault)
+    if (this.ball.touches[Team.PLAYER] > MAX_TOUCHES) {
+      this.handlePointAward(Team.CPU, 'four_hits');
+      return;
+    }
+    if (this.ball.touches[Team.CPU] > MAX_TOUCHES) {
+      this.handlePointAward(Team.PLAYER, 'four_hits');
+      return;
+    }
+
+    // 3. Move Controlled Player
     this.handlePlayerInput();
 
-    // 2. Update AI for CPU Team
+    // 4. Update AI for CPU Team
     this.ai.updateCPU(
       this.cpuTeam,
       this.playerTeam,
@@ -379,29 +420,30 @@ export class Game {
       }
     );
 
-    // 3. Update all player physics
+    // 5. Update all player physics
     this.playerTeam.forEach(p => p.update());
     this.cpuTeam.forEach(p => p.update());
 
-    // 4. Auto-switch controlled player to closest receiver on player's half
-    if (this.ball.x < NET_X && this.ball.inPlay) {
+    // 6. Auto-switch controlled player to closest receiver on player's half or anticipating incoming ball
+    const predLanding = Physics.predictLanding(this.ball);
+    if ((this.ball.x < NET_X || (predLanding.x < NET_X && this.ball.vx < -0.5)) && this.ball.inPlay) {
       this.autoSwitchPlayer();
     }
 
-    // 5. Dynamic Action Button Label
+    // 7. Dynamic Action Button Label
     const playerTouches = this.ball.touches[Team.PLAYER];
     if (playerTouches === 0) {
-      this.input.setActionLabel('RECEIVE');
+      this.input.setActionLabel('レシーブ');
     } else if (playerTouches === 1) {
-      this.input.setActionLabel('TOSS');
+      this.input.setActionLabel('トス');
     } else {
-      this.input.setActionLabel('SPIKE!');
+      this.input.setActionLabel('スパイク');
     }
 
-    // 6. Check Player Hit
+    // 8. Check Player Hit
     this.checkPlayerTeamHit();
 
-    // 7. Check Floor Landing
+    // 9. Check Floor Landing
     if (this.ball.hasBounced) {
       const evaluation = Physics.evaluateLanding(this.ball);
       this.handlePointAward(evaluation.scoringTeam, evaluation.reason);
@@ -414,20 +456,25 @@ export class Game {
     // Analog movement
     p.moveAnalog(this.input.analogX, this.input.analogY);
 
-    // Jump
-    if (this.input.state.jumpPressed && p.isGrounded) {
+    // Jump with buffer
+    if ((this.input.hasBufferedJump() || this.input.state.jumpPressed) && p.isGrounded) {
       p.jump();
+      this.input.consumeJump();
       this.sound.playJump();
     }
 
-    // Spike or Dive Action
-    if (this.input.state.actionPressed) {
+    // Spike, Dive, or Pass Action with buffer
+    if (this.input.hasBufferedAction() || this.input.state.actionPressed) {
+      this.input.consumeAction();
       if (!p.isGrounded) {
+        // Airborne attack
         p.triggerSpike();
       } else {
         const touches = this.ball.touches[Team.PLAYER];
-        const distToBall = Math.hypot(this.ball.x - p.x, (this.ball.depth - p.depth) * 85);
-        if (distToBall > 90 && this.ball.y > FLOOR_Y - 90) {
+        const distToBall = Math.hypot(this.ball.x - p.x, (this.ball.depth - p.depth) * 50);
+
+        // Emergency dive is strictly reserved for 1st touch (defensive receive) when ball is near floor
+        if (touches === 0 && distToBall > 70 && this.ball.y > FLOOR_Y - 90) {
           p.triggerDive();
           this.sound.playShoeSqueak();
         } else if (touches === 0) {
@@ -435,13 +482,25 @@ export class Game {
         } else if (touches === 1) {
           p.triggerToss();
         } else {
+          // 3rd touch: Initiate jump spike immediately from ground
           p.triggerSpike();
+          this.sound.playJump();
         }
       }
     }
   }
 
   private autoSwitchPlayer(): void {
+    // 1. Lockout: Do not interrupt active actions (spike, block, dive, airborne jump)
+    if (
+      this.controlledPlayer.state === PlayerState.SPIKE ||
+      this.controlledPlayer.state === PlayerState.BLOCK ||
+      this.controlledPlayer.state === PlayerState.DIVE ||
+      (!this.controlledPlayer.isGrounded && this.controlledPlayer.state === PlayerState.JUMP)
+    ) {
+      return;
+    }
+
     const prediction = Physics.predictLanding(this.ball);
     let best = this.playerTeam[0];
     let minD = 99999;
@@ -449,12 +508,19 @@ export class Game {
     const touches = this.ball.touches[Team.PLAYER];
 
     for (const p of this.playerTeam) {
-      // Role priority
       let roleWeight = 1.0;
-      if (touches === 1 && p.role === 'setter') roleWeight = 0.5;
-      if (touches === 2 && p.role === 'spiker') roleWeight = 0.6;
+      if (touches === 0) {
+        // 1st Touch: Prioritize back-line defenders
+        if (!p.isFrontLine) roleWeight = 0.65;
+      } else if (touches === 1) {
+        // 2nd Touch: Strong priority to front-line setter (0.10 guarantees setter selection)
+        if (p.role === 'setter') roleWeight = 0.10;
+      } else {
+        // 3rd Touch: Priority to front-line spikers
+        if (p.isFrontLine && p.role === 'spiker') roleWeight = 0.35;
+      }
 
-      const d = Math.hypot(p.x - prediction.x, (p.depth - prediction.depth) * 85) * roleWeight;
+      const d = Math.hypot(p.x - prediction.x, (p.depth - prediction.depth) * 50) * roleWeight;
       if (d < minD) {
         minD = d;
         best = p;
@@ -480,77 +546,161 @@ export class Game {
 
   private executePlayerHit(p: Player, type: string, quality: 'perfect' | 'good' | 'normal'): void {
     const touches = this.ball.touches[Team.PLAYER];
-    this.scoreBoard.recordHit();
 
-    if (type === 'receive' || touches === 0) {
-      // Pass to setter position near net
-      const setter = this.playerTeam.find(pl => pl.role === 'setter') || this.playerTeam[2];
-      this.ball.hitReceive(setter.x - 20, Team.PLAYER, p.id, setter.depth);
-      this.sound.playBallHit('receive');
-      this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, false);
-      this.scoreBoard.triggerCallout('NICE RECEIVE!', '', '#38bdf8');
-    } else if (type === 'toss' || touches === 1) {
-      // Toss high for spiker
-      const spiker = this.playerTeam.find(pl => pl.role === 'spiker' && pl !== p) || this.playerTeam[1];
-      this.ball.hitToss(PLAYER_ATTACK_X + 20, Team.PLAYER, p.id, spiker.depth);
-      this.sound.playBallHit('toss');
-      this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, false);
-      this.scoreBoard.triggerCallout('PERFECT TOSS!', 'SPIKE READY!', '#facc15');
-    } else if (type === 'spike' || touches >= 2) {
-      // Explosive Spike into opponent court
-      const isPeakSpike = !p.isGrounded && Math.abs(p.vy) < 2.5;
-      const speed = isPeakSpike ? 13.5 : 9.5;
+    // Rule: Double Contact Fault
+    if (type === 'double_contact') {
+      this.handlePointAward(Team.CPU, 'double_contact');
+      return;
+    }
 
-      // Steer spike angle with analog input
-      const steerY = this.input.analogY * 1.5;
-      const targetDepth = Math.max(0.1, Math.min(0.9, p.depth + this.input.analogY * 0.4));
+    // Rule: Illegal Block of Serve (FIVB Rule 14.1.3)
+    if (type === 'illegal_block') {
+      this.handlePointAward(Team.CPU, 'illegal_block');
+      return;
+    }
 
-      this.ball.hitSpike(speed, 5.0 + steerY, Team.PLAYER, p.id, (targetDepth - p.depth) * 0.05);
-      this.sound.playBallHit('spike');
-      this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, true);
-      this.court.triggerFlash();
-
-      this.scoreBoard.stats.spikes++;
-      const kmh = isPeakSpike ? '124 KM/H' : '98 KM/H';
-      this.scoreBoard.triggerCallout('SUPER SPIKE!', kmh, '#f43f5e');
-    } else if (type === 'block') {
+    // Defensive Block at net
+    if (type === 'block') {
       this.ball.hitBlock(Team.CPU, p.id);
       this.sound.playBallHit('block');
       this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, true);
       this.scoreBoard.stats.blocks++;
-      this.scoreBoard.triggerCallout('MONSTER BLOCK!', '', '#10b981');
+      this.scoreBoard.triggerCallout('ナイスブロック！', '', '#10b981');
+      return;
+    }
+
+    this.scoreBoard.recordHit();
+
+    // 3rd Touch (or explicit attack on earlier touch): MUST RETURN OVER NET!
+    if (touches >= 2 || type === 'spike' || type === 'over') {
+      if (!p.isGrounded || type === 'spike') {
+        // Explosive Spike smash
+        const isPeakSpike = !p.isGrounded && Math.abs(p.vy) < 2.5;
+        const speed = isPeakSpike ? 13.5 : 9.5;
+
+        // Steer spike angle with analog input
+        const steerY = this.input.analogY * 1.5;
+        const targetDepth = Math.max(0.12, Math.min(0.88, p.depth + this.input.analogY * 0.4));
+
+        this.ball.hitSpike(speed, 5.0 + steerY, Team.PLAYER, p.id, (targetDepth - p.depth) * 0.05);
+        this.sound.playBallHit('spike');
+        this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, true);
+        this.court.triggerFlash();
+
+        this.scoreBoard.stats.spikes++;
+        const speedText = isPeakSpike ? '時速124キロ！' : '時速98キロ！';
+        this.scoreBoard.triggerCallout('強烈なスパイク！', speedText, '#f43f5e');
+      } else {
+        // Chance Ball return over net into opponent court
+        const targetX = 640 + Math.random() * 120;
+        const targetDepth = 0.2 + Math.random() * 0.6;
+        this.ball.hitOver(targetX, Team.PLAYER, p.id, targetDepth);
+        this.sound.playBallHit('receive');
+        this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, false);
+        this.scoreBoard.triggerCallout('チャンスボール！', '相手コートへ返そう', '#38bdf8');
+      }
+      return;
+    }
+
+    // 1st Touch: Receive (pass cleanly to setter near net)
+    if (touches === 0 || type === 'receive') {
+      const setter = this.playerTeam.find(pl => pl.role === 'setter') || this.playerTeam[2];
+      this.ball.hitReceive(setter.x - 15, Team.PLAYER, p.id, setter.depth);
+      this.sound.playBallHit('receive');
+      this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, false);
+      this.scoreBoard.triggerCallout('ナイスレシーブ！', 'セッターへトス', '#38bdf8');
+      return;
+    }
+
+    // 2nd Touch: Toss/Set (high arc for front-line spiker)
+    if (touches === 1 || type === 'toss') {
+      const frontSpikers = this.playerTeam.filter(pl => pl.isFrontLine && pl.role === 'spiker');
+      let chosenSpiker = frontSpikers[0] || this.playerTeam[1];
+
+      // Steer toss to shallow or deep spiker using vertical input
+      if (this.input.analogY > 0.2) {
+        chosenSpiker = frontSpikers.find(s => s.depth > 0.5) || chosenSpiker;
+      } else if (this.input.analogY < -0.2) {
+        chosenSpiker = frontSpikers.find(s => s.depth < 0.5) || chosenSpiker;
+      }
+
+      this.ball.hitToss(PLAYER_ATTACK_X + 25, Team.PLAYER, p.id, chosenSpiker.depth);
+      this.ball.isServed = false;
+      this.sound.playBallHit('toss');
+      this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, false);
+      this.scoreBoard.triggerCallout('ナイスセット！', 'スパイクのチャンス！', '#facc15');
+
+      // Immediately pass control to attacking spiker
+      this.controlledPlayer.isControlled = false;
+      this.controlledPlayer = chosenSpiker;
+      this.controlledPlayer.isControlled = true;
+      this.input.setActionLabel('スパイク');
+      return;
     }
   }
 
-  private handleCpuHit(player: Player, type: 'receive' | 'toss' | 'spike' | 'block'): void {
+  private handleCpuHit(player: Player, type: 'receive' | 'toss' | 'spike' | 'block' | 'over' | 'illegal_block'): void {
     const touches = this.ball.touches[Team.CPU];
     this.scoreBoard.recordHit();
 
-    if (type === 'receive' || touches === 0) {
-      const setter = this.cpuTeam.find(p => p.role === 'setter') || this.cpuTeam[2];
-      this.ball.hitReceive(setter.x + 20, Team.CPU, player.id, setter.depth);
-      this.sound.playBallHit('receive');
-      this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, false);
-    } else if (type === 'toss' || touches === 1) {
-      const spiker = this.cpuTeam.find(p => p.role === 'spiker' && p !== player) || this.cpuTeam[1];
-      this.ball.hitToss(CPU_ATTACK_X - 20, Team.CPU, player.id, spiker.depth);
-      this.sound.playBallHit('toss');
-      this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, false);
-    } else if (type === 'spike') {
-      const targetDepth = 0.2 + Math.random() * 0.6;
-      this.ball.hitSpike(-11.5, 4.8, Team.CPU, player.id, (targetDepth - player.depth) * 0.04);
-      this.sound.playBallHit('spike');
-      this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, true);
-      this.court.triggerFlash();
-    } else if (type === 'block') {
+    // Rule: Illegal Block of Serve (FIVB Rule 14.1.3)
+    if (type === 'illegal_block') {
+      this.handlePointAward(Team.PLAYER, 'illegal_block');
+      return;
+    }
+
+    if (type === 'block') {
       this.ball.hitBlock(Team.PLAYER, player.id);
       this.sound.playBallHit('block');
       this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, true);
+      return;
+    }
+
+    // 3rd Touch (or attack): Return over net to player's side
+    if (touches >= 2 || type === 'spike' || type === 'over') {
+      if (type === 'spike') {
+        const targetDepth = 0.2 + Math.random() * 0.6;
+        this.ball.hitSpike(-11.5, 4.8, Team.CPU, player.id, (targetDepth - player.depth) * 0.04);
+        this.sound.playBallHit('spike');
+        this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, true);
+        this.court.triggerFlash();
+      } else {
+        // Free ball over net
+        const targetX = 220 + Math.random() * 140;
+        const targetDepth = 0.2 + Math.random() * 0.6;
+        this.ball.hitOver(targetX, Team.CPU, player.id, targetDepth);
+        this.sound.playBallHit('receive');
+        this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, false);
+      }
+      return;
+    }
+
+    // 1st Touch: Pass to setter
+    if (touches === 0 || type === 'receive') {
+      const setter = this.cpuTeam.find(p => p.role === 'setter') || this.cpuTeam[2];
+      this.ball.hitReceive(setter.x + 15, Team.CPU, player.id, setter.depth);
+      this.sound.playBallHit('receive');
+      this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, false);
+      return;
+    }
+
+    // 2nd Touch: Toss to front-line spiker
+    if (touches === 1 || type === 'toss') {
+      const frontSpikers = this.cpuTeam.filter(p => p.isFrontLine && p.role === 'spiker');
+      const spiker = frontSpikers[Math.floor(Math.random() * frontSpikers.length)] || this.cpuTeam[1];
+      this.ball.hitToss(CPU_ATTACK_X - 25, Team.CPU, player.id, spiker.depth);
+      this.sound.playBallHit('toss');
+      this.renderer.triggerSpikeImpact(this.ball.x, this.ball.y, false);
+      return;
     }
   }
 
   // --- Point Scored & Rally End ---
-  private handlePointAward(scoringTeam: Team, reason: 'in' | 'out' | 'touch_out'): void {
+  private handlePointAward(scoringTeam: Team, reason: RallyEndReason): void {
+    if (this.state === GameState.BALL_DEAD || this.state === GameState.MATCH_END) {
+      return;
+    }
+
     this.state = GameState.BALL_DEAD;
     this.stateTimer = 90;
     this.sound.playWhistle(true);
@@ -558,9 +708,16 @@ export class Game {
     const isPlayer = scoringTeam === Team.PLAYER;
     this.sound.playScoreFanfare(isPlayer);
 
-    // Callout
-    const callout = isPlayer ? 'POINT FALCONS!' : 'POINT OPPONENT!';
-    this.scoreBoard.triggerCallout(callout, reason === 'in' ? 'CLEAN HIT' : 'OUT OF BOUNDS', isPlayer ? '#38bdf8' : '#f43f5e');
+    const reasonText = {
+      in: isPlayer ? 'ボールが相手コートに落ちた' : 'ボールが自分のコートに落ちた',
+      out: 'アウト（コートの外に落ちた）',
+      four_hits: '４回目のタッチ',
+      double_contact: 'ドリブル（同じ選手の連続タッチ）',
+      net_touch: 'ネットタッチ（ネットにふれた）',
+      illegal_block: 'サーブはブロックできないよ'
+    }[reason];
+    const callout = isPlayer ? 'こちらの得点！' : '相手の得点！';
+    this.scoreBoard.triggerCallout(callout, reasonText, isPlayer ? '#38bdf8' : '#f43f5e');
 
     // Celebrations
     if (isPlayer) {
@@ -571,7 +728,13 @@ export class Game {
       this.playerTeam.forEach(p => p.disappointed());
     }
 
+    // In volleyball, when a team wins the serve (side-out), they rotate clockwise!
+    const previousServeTeam = this.scoreBoard.serveTeam;
     const { gameEnded } = this.scoreBoard.handleRallyEnd(scoringTeam, reason);
+
+    if (scoringTeam !== previousServeTeam) {
+      this.rotateTeam(scoringTeam);
+    }
 
     if (gameEnded) {
       this.stateTimer = 110;
